@@ -1,31 +1,54 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-GEMINI_MODEL = os.getenv(
-    "GEMINI_MODEL",
-    "gemini-3.5-flash-lite"
+# --- Ollama Cloud LLM Settings ---
+
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
+
+LLM_MODEL = os.getenv(
+    "LLM_MODEL",
+    "gpt-oss:120b",
 )
 
-GEMINI_MAX_TOKENS = int(
+LLM_BASE_URL = os.getenv(
+    "LLM_BASE_URL",
+    "https://ollama.com",
+)
+
+LLM_TEMPERATURE = float(
     os.getenv(
-        "GEMINI_MAX_TOKENS",
-        "1024"
+        "LLM_TEMPERATURE",
+        "0.0",
     )
 )
 
+LLM_MAX_TOKENS = int(
+    os.getenv(
+        "LLM_MAX_TOKENS",
+        "1024",
+    )
+)
+
+
+# --- OCR Settings ---
+
 OCR_ENGINE = os.getenv(
     "OCR_ENGINE",
-    "easyocr"
+    "ppocrv6",
 )
 
 OCR_LANGUAGE = os.getenv(
     "OCR_LANGUAGE",
-    "en"
+    "en",
 )
+
+
+# --- File Settings ---
+
 ALLOWED_EXTENSIONS = {
     ".jpg",
     ".jpeg",

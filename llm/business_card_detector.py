@@ -1,18 +1,20 @@
 """
-Business card image detector.
+Business card text detector.
 
 Pipeline:
+
     Image
       ↓
-    Qwen3-VL Vision LLM
+    PP-OCRv6
+      ↓
+    OCR Text
+      ↓
+    GPT-OSS 120B
       ↓
     Business card / Not business card
 
-This module ONLY checks whether the input image is
-clearly a business card.
-
-It does NOT perform OCR.
-It does NOT extract contact information.
+This module only checks whether OCR text
+appears to come from a business card.
 """
 
 import json
@@ -36,10 +38,10 @@ class BusinessCardCheck(BaseModel):
 # --------------------------------------------------
 
 SYSTEM_PROMPT = """
-You are an image classification assistant.
+You are a business-card text classification assistant.
 
-Your ONLY task is to determine whether the provided image
-is clearly a business card.
+Your ONLY task is to determine whether the supplied OCR text
+appears to come from a business card.
 
 Return ONLY valid JSON in exactly this format:
 
@@ -55,10 +57,21 @@ or
 
 RULES:
 
-1. Analyze the image itself.
-2. Return true ONLY when the image is clearly a business card
-   or professional contact card.
-3. Return false for:
+1. Use ONLY the supplied OCR text.
+
+2. Return true ONLY when the text clearly appears to contain
+   professional business-card information.
+
+3. A business card normally contains some combination of:
+   - person's name
+   - company or organization
+   - designation
+   - phone number
+   - email
+   - website
+   - business address
+
+4. Return false for text that appears to come from:
    - receipts
    - invoices
    - forms
@@ -72,21 +85,26 @@ RULES:
    - screenshots
    - ordinary documents
    - letters
-   - photographs
    - webpages
    - social-media screenshots
-   - other non-business-card images
-4. A business card normally contains professional contact
-   information such as a person's name, company, designation,
-   phone number, email, website, or business address.
-5. Do NOT extract any information from the card.
+   - other non-business-card content
+
+5. Do NOT extract any information.
+
 6. Do NOT return the person's name.
+
 7. Do NOT return the company name.
+
 8. Do NOT return OCR text.
+
 9. Do NOT provide explanations.
+
 10. Return ONLY the JSON object.
-11. If you are not confident that the image is a business card,
-    return false.
+
+11. If you are not confident that the OCR text represents
+    a business card, return false.
+
+12. Do NOT use external knowledge.
 """
 
 
@@ -95,16 +113,10 @@ RULES:
 # --------------------------------------------------
 
 def _parse_response(response: str) -> BusinessCardCheck:
-    """
-    Parse the LLM response and validate it with Pydantic.
-    """
 
     response = response.strip()
 
-    # ----------------------------------------------
-    # Try normal JSON first
-    # ----------------------------------------------
-
+    # Normal JSON
     try:
         data = json.loads(response)
         return BusinessCardCheck(**data)
@@ -112,10 +124,7 @@ def _parse_response(response: str) -> BusinessCardCheck:
     except json.JSONDecodeError:
         pass
 
-    # ----------------------------------------------
-    # Try JSON inside markdown code block
-    # ----------------------------------------------
-
+    # JSON inside markdown code block
     json_match = re.search(
         r"```(?:json)?\s*(.*?)\s*```",
         response,
@@ -130,13 +139,9 @@ def _parse_response(response: str) -> BusinessCardCheck:
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
-    # ----------------------------------------------
-    # If response is invalid
-    # ----------------------------------------------
-
     raise ValueError(
-        f"Qwen3-VL returned invalid business-card "
-        f"classification:\n{response}"
+        "GPT-OSS returned invalid business-card classification:\n"
+        + response
     )
 
 
@@ -144,42 +149,33 @@ def _parse_response(response: str) -> BusinessCardCheck:
 # Main detector function
 # --------------------------------------------------
 
-def is_business_card_image(image_path: str) -> bool:
-    """
-    Determine whether an image is a business card.
-
-    Args:
-        image_path: Path to the image.
-
-    Returns:
-        True  -> image is a business card.
-        False -> image is not a business card.
-    """
+def is_business_card_text(raw_text: str) -> bool:
 
     client = LLMClient()
 
-    user_message = """
-Look at the provided image.
+    user_message = f"""
+Determine whether the following OCR text is from a business card.
 
-Determine whether this image is clearly a business card.
+--- OCR TEXT START ---
+{raw_text}
+--- OCR TEXT END ---
 
 Return ONLY:
 
-{
+{{
   "is_business_card": true
-}
+}}
 
 or:
 
-{
+{{
   "is_business_card": false
-}
+}}
 """
 
-    response = client.chat_with_image(
+    response = client.chat(
         system_prompt=SYSTEM_PROMPT,
         user_message=user_message,
-        image_path=image_path,
     )
 
     result = _parse_response(response)

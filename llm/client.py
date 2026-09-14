@@ -1,40 +1,46 @@
 """
-Gemini API client.
+Ollama Cloud API client.
 
 Handles:
 - Text-only LLM requests
-- Vision LLM requests
+
+GPT-OSS is text-only, so image/vision requests are not supported here.
+PP-OCRv6 handles image → text before this client is called.
 """
 
-from pathlib import Path
-import mimetypes
-
-from google import genai
-from google.genai import types
+import os
+import ollama
 
 from config import (
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
-    GEMINI_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_BASE_URL,
+    LLM_TEMPERATURE,
+    LLM_MAX_TOKENS,
 )
 
 
 class LLMClient:
-    """Client wrapper for Google Gemini API."""
+    """Client wrapper for Ollama Cloud API."""
 
     def __init__(self):
-        if not GEMINI_API_KEY:
+        api_key = os.getenv("OLLAMA_API_KEY")
+
+        if not api_key:
             raise ValueError(
-                "GEMINI_API_KEY is not set! "
+                "OLLAMA_API_KEY is not set! "
                 "Please add it to the .env file."
             )
 
-        self.client = genai.Client(
-            api_key=GEMINI_API_KEY
+        self.client = ollama.Client(
+            host=LLM_BASE_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}"
+            },
         )
 
-        self.model = GEMINI_MODEL
-        self.max_tokens = GEMINI_MAX_TOKENS
+        self.model = LLM_MODEL
+        self.temperature = LLM_TEMPERATURE
+        self.max_tokens = LLM_MAX_TOKENS
 
     def chat(
         self,
@@ -42,53 +48,22 @@ class LLMClient:
         user_message: str,
     ) -> str:
 
-        response = self.client.models.generate_content(
+        response = self.client.chat(
             model=self.model,
-            contents=user_message,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                max_output_tokens=self.max_tokens,
-            ),
-        )
-
-        return response.text
-
-    def chat_with_image(
-        self,
-        system_prompt: str,
-        user_message: str,
-        image_path: str,
-    ) -> str:
-
-        image_file = Path(image_path)
-
-        if not image_file.exists():
-            raise FileNotFoundError(
-                f"Image not found: {image_path}"
-            )
-
-        image_bytes = image_file.read_bytes()
-
-        mime_type = (
-            mimetypes.guess_type(image_file.name)[0]
-            or "image/jpeg"
-        )
-
-        image_part = types.Part.from_bytes(
-            data=image_bytes,
-            mime_type=mime_type,
-        )
-
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=[
-                image_part,
-                user_message,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": user_message,
+                },
             ],
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                max_output_tokens=self.max_tokens,
-            ),
+            options={
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens,
+            },
         )
 
-        return response.text
+        return response.message.content

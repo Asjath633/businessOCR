@@ -14,7 +14,7 @@ import json
 import argparse
 from ocr.extractor import extract_text_from_image
 from llm.extractor import extract_structured_data
-from llm.business_card_detector import is_business_card_image
+from llm.business_card_detector import is_business_card_text
 
 
 def process_business_card(image_path):
@@ -24,37 +24,10 @@ def process_business_card(image_path):
     print("=" * 50)
 
     # --------------------------------------------------
-    # STEP 1: BUSINESS CARD DETECTION
+    # STEP 1: OCR
     # --------------------------------------------------
 
-    print("\n[1/4] 🧠 Checking if image is a business card...")
-
-    try:
-        is_business_card = is_business_card_image(
-            image_path
-        )
-
-    except Exception as e:
-        print(f"\n❌ Business-card detection failed:")
-        print(e)
-        print("=" * 50)
-        return
-
-    if not is_business_card:
-
-        print("\n❌ This image is not a business card.")
-        print("⏹ Processing stopped.")
-        print("=" * 50)
-
-        return
-
-    print("✓ Business card detected.")
-
-    # --------------------------------------------------
-    # STEP 2: OCR
-    # --------------------------------------------------
-
-    print("\n[2/4] 🔍 Extracting text using OCR...")
+    print("\n[1/3] 🔍 Extracting text using PP-OCRv6...")
 
     try:
         ocr_result = extract_text_from_image(
@@ -77,19 +50,41 @@ def process_business_card(image_path):
         f"{ocr_result.confidence:.2f}%"
     )
 
-    print(
-        f"✓ OCR complete "
-        f"(Confidence: {ocr_result.confidence:.2f}%)"
-    )
-
     print("\n--- RAW OCR TEXT ---")
     print(ocr_result.raw_text)
 
     # --------------------------------------------------
-    # STEP 3: LLM STRUCTURING
+    # STEP 2: BUSINESS CARD DETECTION
     # --------------------------------------------------
 
-    print("\n[3/4] 🧠 Structuring OCR data with Gemini")
+    print("\n[2/3] 🧠 Checking business card using GPT-OSS...")
+
+    try:
+        is_business_card = is_business_card_text(
+            ocr_result.raw_text
+        )
+
+    except Exception as e:
+        print("\n❌ Business-card detection failed:")
+        print(e)
+        print("=" * 50)
+        return
+
+    if not is_business_card:
+
+        print("\n❌ This image is not a business card.")
+        print("⏹ Processing stopped.")
+        print("=" * 50)
+
+        return
+
+    print("✓ Business card detected.")
+
+    # --------------------------------------------------
+    # STEP 3: STRUCTURED EXTRACTION
+    # --------------------------------------------------
+
+    print("\n[3/3] 🧠 Structuring OCR data with GPT-OSS...")
 
     try:
         structured_data = extract_structured_data(
@@ -97,16 +92,12 @@ def process_business_card(image_path):
         )
 
     except Exception as e:
-        print("\n❌ LLM structuring failed:")
+        print("\n❌ GPT-OSS structuring failed:")
         print(e)
         print("=" * 50)
         return
 
-    # --------------------------------------------------
-    # STEP 4: PYDANTIC VALIDATION
-    # --------------------------------------------------
-
-    print("\n[4/4] ✅ Pydantic validation completed.")
+    print("\n✓ Pydantic validation completed.")
 
     print("\n--- STRUCTURED JSON ---")
 
