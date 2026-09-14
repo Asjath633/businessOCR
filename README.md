@@ -44,7 +44,7 @@ pip install -r requirements.txt
 
 Edit [.env](file:///e:/API_OCR/business_card/.env) and set your API key and provider URL:
 
-#### For Groq (Recommended):
+#### For Ollama (Recommended):
 ```env
 LLM_API_KEY=ollama API key
 LLM_BASE_URL=https://ollama.com
