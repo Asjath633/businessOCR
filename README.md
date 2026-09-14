@@ -4,8 +4,8 @@ Extract structured contact information from business card images using OCR + LLM
 
 ## Features
 
-- **OCR Extraction** — Tesseract or EasyOCR for raw text extraction
-- **LLM Structuring** — Groq / OpenRouter / Llama 3.3 70B to parse raw text into clean structured JSON
+- **OCR Extraction** — paddle-ocr for raw text extraction
+- **LLM Structuring** — gpt-oss:120b to parse raw text into clean structured JSON
 - **Terminal CLI Interface** — Run directly with image paths or auto-indexed numbers
 - **Validation** — Pydantic schemas for type-safe, validated output
 
@@ -46,18 +46,10 @@ Edit [.env](file:///e:/API_OCR/business_card/.env) and set your API key and prov
 
 #### For Groq (Recommended):
 ```env
-LLM_API_KEY=gsk_your_groq_api_key
-LLM_BASE_URL=https://api.groq.com/openai/v1
-LLM_MODEL=llama-3.3-70b-versatile
+LLM_API_KEY=ollama API key
+LLM_BASE_URL=https://ollama.com
+LLM_MODEL=gpt-oss:120b
 ```
-
-#### For OpenRouter:
-```env
-LLM_API_KEY=sk-or-v1-your-openrouter-key
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL=meta-llama/llama-3.3-70b-instruct
-```
-
 ### 3. Usage in Terminal
 
 #### List all available images:
@@ -102,10 +94,10 @@ python main.py inputs/Camera/IMG_20200209_184151.jpg
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_API_KEY` | — | Groq or OpenRouter API key |
-| `LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Provider API endpoint URL |
-| `LLM_MODEL` | `llama-3.3-70b-versatile` | Model ID to use for extraction |
-| `OCR_ENGINE` | `tesseract` / `easyocr` | OCR engine choice |
+| `LLM_API_KEY` | — | ollama API key |
+| `LLM_BASE_URL` | ' | 'https://ollama.com' Provider API endpoint URL |
+| `LLM_MODEL` | `gpt-oss:120b` | Model ID to use for extraction |
+| `OCR_ENGINE` | 'ppocrv6' | OCR engine choice |
 | `OCR_LANGUAGE` | `eng` | OCR language code |
 
 ## License
