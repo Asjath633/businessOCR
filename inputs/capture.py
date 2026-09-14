@@ -7,7 +7,7 @@ from pathlib import Path
 # CAMERA SETTINGS
 # ============================================================
 
-CAMERA_INDEX = 1
+CAMERA_INDEX = 0
 
 FRAME_WIDTH = 1920
 FRAME_HEIGHT = 1080

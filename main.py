@@ -5,16 +5,14 @@ Run directly from terminal to extract structured contact data from an image file
 Usage:
     python main.py path/to/business_card.png
 """
-
+import time
 import warnings
 warnings.filterwarnings("ignore")
 
 import sys
-import json
 import argparse
 from ocr.extractor import extract_text_from_image
 from llm.extractor import extract_structured_data
-from llm.business_card_detector import is_business_card_text
 
 
 def process_business_card(image_path):
@@ -27,14 +25,20 @@ def process_business_card(image_path):
     # STEP 1: OCR
     # --------------------------------------------------
 
-    print("\n[1/3] 🔍 Extracting text using PP-OCRv6...")
+    print("\n[1/2] 🔍 Extracting text using PP-OCRv6...")
 
     try:
+        ocr_start = time.perf_counter()
+
         ocr_result = extract_text_from_image(
             image_path
         )
 
+        ocr_time = time.perf_counter() - ocr_start
+        print(f"⏱️ OCR time: {ocr_time:.2f} seconds")
+
     except Exception as e:
+
         print("\n❌ OCR failed:")
         print(e)
         print("=" * 50)
@@ -42,7 +46,7 @@ def process_business_card(image_path):
 
     print(
         f"✓ Best OCR preprocessing: "
-        f"{getattr(ocr_result, 'best_preprocessing', 'CLAHE')}"
+        f"{getattr(ocr_result, 'best_preprocessing', 'Full Card')}"
     )
 
     print(
@@ -54,23 +58,32 @@ def process_business_card(image_path):
     print(ocr_result.raw_text)
 
     # --------------------------------------------------
-    # STEP 2: BUSINESS CARD DETECTION
+    # STEP 2: GPT-OSS
     # --------------------------------------------------
 
-    print("\n[2/3] 🧠 Checking business card using GPT-OSS...")
+    print("\n[2/2] 🧠 Checking + structuring with GPT-OSS 120B...")
 
     try:
-        is_business_card = is_business_card_text(
+        llm_start = time.perf_counter()
+
+        structured_data = extract_structured_data(
             ocr_result.raw_text
         )
 
+        llm_time = time.perf_counter() - llm_start
+        print(f"⏱️ GPT-OSS time: {llm_time:.2f} seconds")
+
     except Exception as e:
-        print("\n❌ Business-card detection failed:")
+        print("\n❌ GPT-OSS failed:") 
         print(e)
         print("=" * 50)
         return
 
-    if not is_business_card:
+    # --------------------------------------------------
+    # BUSINESS CARD CHECK
+    # --------------------------------------------------
+
+    if not structured_data.is_business_card:
 
         print("\n❌ This image is not a business card.")
         print("⏹ Processing stopped.")
@@ -78,24 +91,11 @@ def process_business_card(image_path):
 
         return
 
-    print("✓ Business card detected.")
+    print("\n✓ Business card detected.")
 
     # --------------------------------------------------
-    # STEP 3: STRUCTURED EXTRACTION
+    # FINAL JSON
     # --------------------------------------------------
-
-    print("\n[3/3] 🧠 Structuring OCR data with GPT-OSS...")
-
-    try:
-        structured_data = extract_structured_data(
-            ocr_result.raw_text
-        )
-
-    except Exception as e:
-        print("\n❌ GPT-OSS structuring failed:")
-        print(e)
-        print("=" * 50)
-        return
 
     print("\n✓ Pydantic validation completed.")
 
@@ -108,8 +108,6 @@ def process_business_card(image_path):
     )
 
     print("=" * 50)
-
-
 import os
 import sys
 

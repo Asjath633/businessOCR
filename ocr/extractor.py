@@ -1,17 +1,45 @@
+"""
+PP-OCRv6 based text extraction.
+
+Pipeline:
+
+    Image
+      ↓
+    PP-OCRv6 (CPU)
+      ↓
+    Raw OCR text
+      ↓
+    GPT-OSS 120B Cloud
+      ↓
+    Structured JSON
+
+Only ONE OCR inference is performed.
+
+No contact-region OCR.
+No extra crop.
+No duplicate OCR pass.
+"""
+import cv2
 from dataclasses import dataclass
 from typing import List
-from pathlib import Path
 
-import cv2
 from paddleocr import PaddleOCR
 
+
+# ============================================================
+# OCR RESULT
+# ============================================================
 
 @dataclass
 class OCRResult:
     raw_text: str
     confidence: float
-    best_preprocessing: str = "Full + Contact Region"
+    best_preprocessing: str = "Full Card"
 
+
+# ============================================================
+# LOAD PP-OCRv6 ONCE
+# ============================================================
 
 print("🔄 Loading PP-OCRv6...")
 
@@ -27,12 +55,17 @@ ocr = PaddleOCR(
 print("✓ PP-OCRv6 loaded.")
 
 
+# ============================================================
+# PADDLEOCR RESULT PARSER
+# ============================================================
+
 def get_ocr_data(result):
     """
     Extract OCR data from a PaddleOCR 3.x result.
     """
 
     if hasattr(result, "json"):
+
         data = result.json
 
         if isinstance(data, str):
@@ -40,17 +73,26 @@ def get_ocr_data(result):
             data = json.loads(data)
 
     elif isinstance(result, dict):
+
         data = result
 
     else:
+
         raise RuntimeError(
             f"Unsupported PaddleOCR result type: {type(result)}"
         )
+
+    # PaddleOCR 3.x may return:
+    #
+    # {
+    #     "res": {...}
+    # }
 
     if isinstance(data, dict) and "res" in data:
         data = data["res"]
 
     if not isinstance(data, dict):
+
         raise RuntimeError(
             f"Unexpected PaddleOCR result structure: {type(data)}"
         )
@@ -58,12 +100,80 @@ def get_ocr_data(result):
     return data
 
 
+# ============================================================
+# SINGLE OCR PASS
+# ============================================================
+
 def run_ocr(image_path: str):
     """
-    Run PP-OCRv6 on an image.
+    Run PP-OCRv6 on a resized image.
+
+    Large camera images are resized before OCR to reduce
+    CPU inference time while preserving enough resolution
+    for business-card text.
     """
 
-    results = ocr.predict(image_path)
+    # --------------------------------------------------
+    # Load image
+    # --------------------------------------------------
+
+    image = cv2.imread(image_path)
+
+    if image is None:
+        raise FileNotFoundError(
+            f"Could not read image: {image_path}"
+        )
+
+    original_height, original_width = image.shape[:2]
+
+    # --------------------------------------------------
+    # Resize large images
+    # --------------------------------------------------
+
+    max_side = 1600
+
+    current_max_side = max(
+        original_width,
+        original_height
+    )
+
+    if current_max_side > max_side:
+
+        scale = max_side / current_max_side
+
+        new_width = int(
+            original_width * scale
+        )
+
+        new_height = int(
+            original_height * scale
+        )
+
+        image = cv2.resize(
+            image,
+            (new_width, new_height),
+            interpolation=cv2.INTER_AREA,
+        )
+
+        print(
+            f"📐 OCR resize: "
+            f"{original_width}x{original_height} "
+            f"→ "
+            f"{new_width}x{new_height}"
+        )
+
+    else:
+
+        print(
+            f"📐 OCR image size: "
+            f"{original_width}x{original_height}"
+        )
+
+    # --------------------------------------------------
+    # ONE PP-OCRv6 inference
+    # --------------------------------------------------
+
+    results = ocr.predict(image)
 
     texts: List[str] = []
     scores: List[float] = []
@@ -72,20 +182,36 @@ def run_ocr(image_path: str):
 
         data = get_ocr_data(result)
 
-        rec_texts = data.get("rec_texts", [])
-        rec_scores = data.get("rec_scores", [])
+        rec_texts = data.get(
+            "rec_texts",
+            []
+        )
+
+        rec_scores = data.get(
+            "rec_scores",
+            []
+        )
 
         for text in rec_texts:
+
             text = str(text).strip()
 
             if text:
                 texts.append(text)
 
         for score in rec_scores:
+
             try:
-                scores.append(float(score))
+                scores.append(
+                    float(score)
+                )
+
             except (TypeError, ValueError):
                 pass
+
+    # --------------------------------------------------
+    # Confidence
+    # --------------------------------------------------
 
     confidence = (
         (sum(scores) / len(scores)) * 100
@@ -96,182 +222,65 @@ def run_ocr(image_path: str):
     return texts, scores, confidence
 
 
-def create_contact_crop(image_path: str) -> str:
+# ============================================================
+# MAIN OCR FUNCTION
+# ============================================================
+
+def extract_text_from_image(
+    image_path: str
+) -> OCRResult:
     """
-    Crop the contact-information area of the business card.
-    """
+    Extract text from a business-card image.
 
-    image = cv2.imread(image_path)
+    IMPORTANT:
 
-    if image is None:
-        raise FileNotFoundError(
-            f"Could not read image: {image_path}"
-        )
+    Only ONE PP-OCRv6 inference is performed.
 
-    height, width = image.shape[:2]
-
-    # Contact section
-    x1 = int(width * 0.25)
-    x2 = int(width * 0.53)
-
-    y1 = int(height * 0.52)
-    y2 = int(height * 0.98)
-
-    crop = image[y1:y2, x1:x2]
-
-    # Upscale 3x
-    crop = cv2.resize(
-        crop,
-        None,
-        fx=3,
-        fy=3,
-        interpolation=cv2.INTER_CUBIC,
-    )
-
-    # Keep image below PP-OCRv6 max side limit
-    max_side = 3900
-
-    crop_height, crop_width = crop.shape[:2]
-
-    if max(crop_height, crop_width) > max_side:
-        scale = max_side / max(crop_height, crop_width)
-
-        crop = cv2.resize(
-            crop,
-            None,
-            fx=scale,
-            fy=scale,
-            interpolation=cv2.INTER_AREA,
-        )
-
-    # Sharpen
-    blurred = cv2.GaussianBlur(
-        crop,
-        (0, 0),
-        2
-    )
-
-    sharpened = cv2.addWeighted(
-        crop,
-        1.5,
-        blurred,
-        -0.5,
-        0
-    )
-
-    output_path = "inputs/contact_region.jpg"
-
-    cv2.imwrite(
-        output_path,
-        sharpened
-    )
-
-    return output_path
-
-
-def extract_text_from_image(image_path: str) -> OCRResult:
-    """
-    Extract business-card text using:
-
-    1. Full-card PP-OCRv6
-    2. Dedicated contact-region PP-OCRv6
+    The entire card is processed directly.
+    GPT-OSS will handle business-card detection
+    and structured extraction afterward.
     """
 
     print("\n🔍 Running full-card OCR...")
 
-    full_texts, full_scores, full_confidence = run_ocr(
+    # ========================================================
+    # ONE OCR CALL ONLY
+    # ========================================================
+
+    full_texts, full_scores, confidence = run_ocr(
         image_path
     )
 
     print(
         f"✓ Full-card confidence: "
-        f"{full_confidence:.2f}%"
+        f"{confidence:.2f}%"
     )
+
+    # ========================================================
+    # RAW OCR
+    # ========================================================
 
     print("\n--- FULL CARD OCR ---")
 
     for text in full_texts:
         print(text)
 
-    # --------------------------------------------------
-    # Contact region
-    # --------------------------------------------------
+    # ========================================================
+    # BUILD RAW TEXT
+    # ========================================================
 
-    print("\n📱 Processing contact-information region...")
-
-    try:
-
-        contact_path = create_contact_crop(
-            image_path
-        )
-
-        contact_texts, contact_scores, contact_confidence = run_ocr(
-            contact_path
-        )
-
-        print(
-            f"✓ Contact-region confidence: "
-            f"{contact_confidence:.2f}%"
-        )
-
-        print("\n--- CONTACT REGION OCR ---")
-
-        for text in contact_texts:
-            print(text)
-
-    except Exception as e:
-
-        print(
-            f"⚠️ Contact-region OCR failed: {e}"
-        )
-
-        contact_texts = []
-        contact_scores = []
-        contact_confidence = 0.0
-
-    # --------------------------------------------------
-    # Combine results
-    # --------------------------------------------------
-
-    combined_texts = []
-
-    for text in full_texts + contact_texts:
-
-        normalized = text.strip().lower()
-
-        # Avoid exact duplicate lines
-        duplicate = False
-
-        for existing in combined_texts:
-
-            if existing.strip().lower() == normalized:
-                duplicate = True
-                break
-
-        if not duplicate:
-            combined_texts.append(text)
-
-    raw_text = "\n".join(combined_texts)
-
-    # Combine confidence scores
-    all_scores = (
-        full_scores +
-        contact_scores
+    raw_text = "\n".join(
+        full_texts
     )
 
-    confidence = (
-        (sum(all_scores) / len(all_scores)) * 100
-        if all_scores
-        else 0.0
-    )
-
-    print("\n--- COMBINED OCR ---")
-    print(raw_text)
+    # ========================================================
+    # COMPLETE
+    # ========================================================
 
     print("\n🏆 OCR processing completed.")
 
     return OCRResult(
         raw_text=raw_text,
         confidence=confidence,
-        best_preprocessing="Full + Contact Region",
+        best_preprocessing="Full Card",
     )

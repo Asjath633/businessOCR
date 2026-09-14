@@ -3,9 +3,10 @@ Ollama Cloud API client.
 
 Handles:
 - Text-only LLM requests
+- Structured JSON responses
 
 GPT-OSS is text-only, so image/vision requests are not supported here.
-PP-OCRv6 handles image → text before this client is called.
+PP-OCRv6 handles image -> text before this client is called.
 """
 
 import os
@@ -23,6 +24,7 @@ class LLMClient:
     """Client wrapper for Ollama Cloud API."""
 
     def __init__(self):
+
         api_key = os.getenv("OLLAMA_API_KEY")
 
         if not api_key:
@@ -46,11 +48,19 @@ class LLMClient:
         self,
         system_prompt: str,
         user_message: str,
+        response_format=None,
     ) -> str:
+        """
+        Send a text request to GPT-OSS.
 
-        response = self.client.chat(
-            model=self.model,
-            messages=[
+        response_format:
+            Optional JSON schema used to force structured output.
+        """
+
+        kwargs = {
+            "model": self.model,
+
+            "messages": [
                 {
                     "role": "system",
                     "content": system_prompt,
@@ -60,10 +70,17 @@ class LLMClient:
                     "content": user_message,
                 },
             ],
-            options={
+
+            "options": {
                 "temperature": self.temperature,
                 "num_predict": self.max_tokens,
             },
-        )
+        }
+
+        # Force structured JSON when a schema is provided
+        if response_format is not None:
+            kwargs["format"] = response_format
+
+        response = self.client.chat(**kwargs)
 
         return response.message.content
