@@ -11,7 +11,7 @@ class BusinessCardData(BaseModel):
     """Structured data extracted from a business card."""
 
     is_business_card: bool = Field(
-        ...,
+        ..., 
         description="Whether the OCR text represents a business card"
     )
 
@@ -53,3 +53,16 @@ class BusinessCardData(BaseModel):
         if isinstance(v, str):
             return [v] if v.strip() else []
         return v or []
+
+class OCRResult(BaseModel):
+    """Raw OCR extraction result."""
+
+    raw_text: str = Field(
+        ...,
+        description="Raw text extracted by OCR engine"
+    )
+
+    confidence: Optional[float] = Field(
+        None,
+        description="Overall OCR confidence score"
+    )

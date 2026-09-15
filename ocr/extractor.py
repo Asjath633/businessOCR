@@ -20,6 +20,7 @@ No extra crop.
 No duplicate OCR pass.
 """
 import cv2
+import time
 from dataclasses import dataclass
 from typing import List
 
@@ -117,7 +118,10 @@ def run_ocr(image_path: str):
     # Load image
     # --------------------------------------------------
 
+    load_start = time.perf_counter()
     image = cv2.imread(image_path)
+    load_time = time.perf_counter() - load_start
+    print(f"📥 Image Loading : {load_time:.2f} sec")
 
     if image is None:
         raise FileNotFoundError(
@@ -129,8 +133,8 @@ def run_ocr(image_path: str):
     # --------------------------------------------------
     # Resize large images
     # --------------------------------------------------
-
-    max_side = 1600
+    max_side = 1000
+    resize_start = time.perf_counter()
 
     current_max_side = max(
         original_width,
@@ -172,11 +176,16 @@ def run_ocr(image_path: str):
     # --------------------------------------------------
     # ONE PP-OCRv6 inference
     # --------------------------------------------------
-
+    resize_time = time.perf_counter() - resize_start
+    print(f"📐 Resize Time   : {resize_time:.2f} sec")
+    inference_start = time.perf_counter()
     results = ocr.predict(image)
+    inference_time = time.perf_counter() - inference_start
 
+    print(f"🔎 OCR Inference : {inference_time:.2f} sec")   
     texts: List[str] = []
     scores: List[float] = []
+    parse_start = time.perf_counter()
 
     for result in results:
 
@@ -208,6 +217,9 @@ def run_ocr(image_path: str):
 
             except (TypeError, ValueError):
                 pass
+        
+    parse_time = time.perf_counter() - parse_start
+    print(f"🧹 OCR Parsing  : {parse_time:.2f} sec")
 
     # --------------------------------------------------
     # Confidence
@@ -240,7 +252,7 @@ def extract_text_from_image(
     GPT-OSS will handle business-card detection
     and structured extraction afterward.
     """
-
+    total_start = time.perf_counter()
     print("\n🔍 Running full-card OCR...")
 
     # ========================================================
@@ -278,6 +290,10 @@ def extract_text_from_image(
     # ========================================================
 
     print("\n🏆 OCR processing completed.")
+    total_time = time.perf_counter() - total_start
+    print("-" * 50)
+    print(f"🔍 OCR TOTAL     : {total_time:.2f} sec")
+    print("=" * 50)
 
     return OCRResult(
         raw_text=raw_text,

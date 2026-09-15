@@ -9,6 +9,9 @@ __pycache__/
 dist/
 build/
 *.egg
+test_ocr.py
+test_ollama.py
+
 
 # Virtual environments
 venv/

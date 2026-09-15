@@ -16,7 +16,7 @@ WINDOW_NAME = "Business Card Scanner"
 
 OUTPUT_PATH = "inputs/camera_capture.jpg"
 
-TARGET_WIDTH = 1600
+TARGET_WIDTH = 1200
 
 
 # ============================================================
