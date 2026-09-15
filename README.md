@@ -66,6 +66,12 @@ python main.py
 ```bash
 python main.py 1
 ```
+### To Run the UI 
+'''
+streamlit run ui/app.py
+'''
+### To run the Camera in Terminal 
+''' python main.py camera'''
 
 #### Run by specific image path:
 ```bash
